@@ -1,0 +1,4 @@
+SOURCE = \
+fvOptions/penalisedSource/penalisedSource.C \
+
+# sources
