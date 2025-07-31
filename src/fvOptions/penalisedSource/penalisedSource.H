@@ -89,8 +89,21 @@ protected:
         //- Body force to apply to field
         volVectorField bodyForce_;
 
+        //- Body force applied to LHS of momentum equations
+        volVectorField bodyForceLHS_;
+
+        //- Forcing applied to the RHS of momentum equations
+        volVectorField bodyForceRHS_;
+        
+        //- Forcing applied to the LHS of momentum equations
+        // (bodyForceLHS_ = bodyForceLHScoeff_ * U)
+        volScalarField bodyForceLHSCoeff_;
+
         //- Mask for the solid cells
         volScalarField solidMask_;
+
+        //- Field of body velocities
+        volVectorField bodyVelocity_;
 
         // searchableSurfaces solidGeometry_;
         autoPtr<searchableSurfaces> surfacesPtr_;
@@ -103,6 +116,12 @@ protected:
 
         //- Move the solid mask
         void updateSolidMask();
+
+        //- Move the solid mask
+        void updateBodyVelocity();
+
+        //- Move the solid mask
+        void updateBodyForce();
 
         //- Read dictionary
         bool read(const dictionary& dict);

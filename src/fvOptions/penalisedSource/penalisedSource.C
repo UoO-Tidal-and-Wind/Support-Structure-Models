@@ -95,25 +95,10 @@ void Foam::fv::penalisedSource::writeData(Ostream& os) const
 
 void Foam::fv::penalisedSource::updateSolidMask()
 {
-    // forAll(mesh_.C(), celli)
-    // {
-        // const point& pt = mesh_.C()[celli];
-        
-
-        // // // first check if cell is within the bounding box
-        // if (boundingBox_.contains(pt))
-        // {
-        //     // point is inside bouding box so check if inside surface
-            
-        // }    
-        // else
-        // {
-        //     // point is outside bounding box so set mask to -1
-        //     solidMask_[celli] = -1.0;
-        //     continue;
-        // }
-    // }
-
+    // This function could be abstracted into a class to allow for
+    // more advanced methods later on...
+    
+    solidMask_ = scalar(0.0);
     forAll(surfacesPtr_->names(), geomi)
     {
         const searchableSurface& s = (*surfacesPtr_)[geomi];
@@ -127,14 +112,16 @@ void Foam::fv::penalisedSource::updateSolidMask()
             if (volTypes[pti] == volumeType::INSIDE)
             {
                 solidMask_[pti] = 1.0;
+                // Info << "Point: " << pti << " Volume Type: " << "INSIDE" << endl;
             }
             else if (volTypes[pti] == volumeType::OUTSIDE)
             {
-                // solidMask_[pti] = -1.0;
+                solidMask_[pti] = Foam::max(0.0, solidMask_[pti]);
             }
             else if (volTypes[pti] == volumeType::MIXED)
             {
-                // solidMask_[pti] = 0.0; 
+                // bounday points
+                solidMask_[pti] = Foam::max(1.0, solidMask_[pti]); 
             }
             else if (volTypes[pti] == volumeType::UNKNOWN)
             {
@@ -143,8 +130,23 @@ void Foam::fv::penalisedSource::updateSolidMask()
         }
 
     }
+}
 
+void Foam::fv::penalisedSource::updateBodyVelocity()
+{
+    // bodyVelocity_ = dimensionedVector(baseVelocity_, dimVelocity);
+    bodyVelocity_ = dimensionedVector("bodyVelocity",dimVelocity,baseVelocity_);
+}
 
+void Foam::fv::penalisedSource::updateBodyForce()
+{
+    // bodyForceLHSCoeff_ = -penalisationFactor_ * solidMask_;
+    // bodyForceLHSCoeff_ *= mesh_.V();
+    forAll(mesh_.C(), celli)
+    {
+        bodyForceLHSCoeff_[celli] = -penalisationFactor_ * solidMask_[celli] / mesh_.V()[celli];
+        bodyForceRHS_[celli] = -penalisationFactor_ * solidMask_[celli] * bodyVelocity_[celli] / mesh_.V()[celli];
+    }
 }
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
@@ -164,7 +166,7 @@ Foam::fv::penalisedSource::penalisedSource
     (
         IOobject
         (
-            "force." + name,
+            "bodyForce." + name,
             mesh_.time().timeName(),
             mesh,
             IOobject::NO_READ,
@@ -172,6 +174,45 @@ Foam::fv::penalisedSource::penalisedSource
         ),
         mesh_,
         dimensionedVector("bodyForce",dimForce/dimVolume/dimDensity,vector::zero)
+    ),
+    bodyForceLHS_
+    (
+        IOobject
+        (
+            "bodyForceLHS." + name,
+            mesh_.time().timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::NO_WRITE
+        ),
+        mesh_,
+        dimensionedVector("bodyForceLHS",dimForce/dimVolume/dimDensity,vector::zero)
+    ),
+    bodyForceRHS_
+    (
+        IOobject
+        (
+            "bodyForceRHS." + name,
+            mesh_.time().timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::NO_WRITE
+        ),
+        mesh_,
+        dimensionedVector("bodyForceRHS",dimForce/dimVolume/dimDensity,vector::zero)
+    ),
+    bodyForceLHSCoeff_
+    (
+        IOobject
+        (
+            "bodyForceLHSCoeff." + name,
+            mesh_.time().timeName(),
+            mesh_,
+            IOobject::NO_READ,
+            IOobject::NO_WRITE
+        ),
+        mesh_,
+        dimensionedScalar("bodyForceLHSCoeff",dimless/dimTime,0.0)
     ),
     solidMask_
     (
@@ -184,7 +225,20 @@ Foam::fv::penalisedSource::penalisedSource
             IOobject::AUTO_WRITE
         ),
         mesh_,
-        dimensionedScalar("cellFinder",dimless,-1.0)
+        dimensionedScalar("solidMask",dimless,-1.0)
+    ),
+    bodyVelocity_
+    (
+        IOobject
+        (
+            "bodyVelocity." + name,
+            mesh_.time().timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        mesh_,
+        dimensionedVector("bodyVelocity",dimVelocity,vector::zero)
     )
 {
     read(dict);
@@ -194,12 +248,14 @@ Foam::fv::penalisedSource::penalisedSource
     {
         Info << "Name:    " << surfacesPtr_->names()[geomi] << endl;
         Info << "Number of points:    " << (*surfacesPtr_)[geomi].size() << endl;
+        Info << "Has volume Type:    " << (*surfacesPtr_)[geomi].hasVolumeType() << endl;
     }
     Info << endl;
     
     boundingBox_ = surfacesPtr_->bounds();
 
     updateSolidMask();
+    updateBodyVelocity();
 }
 
 
@@ -217,14 +273,21 @@ void Foam::fv::penalisedSource::addSup
     const label fieldI
 )
 {
-    // zero the body forces
-    bodyForce_ *= 0.0;
-
     // check if the source is moving
     if (moving_)
     {
         updateSolidMask();
+        updateBodyVelocity();
+        updateBodyForce();
     }
+
+    // add term to the LHS of the momentum equation
+    const volVectorField& U = eqn.psi();
+    eqn -= fvm::Sp(bodyForceLHSCoeff_,U);
+    eqn -= bodyForceRHS_;
+
+    bodyForceLHS_ = bodyForceLHSCoeff_ * U;
+    bodyForce_ = bodyForceLHS_ + bodyForceRHS_;
 }
 
 
