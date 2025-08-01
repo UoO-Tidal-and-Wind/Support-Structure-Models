@@ -1,3 +1,6 @@
 fvOptions/penalisedSource/penalisedSource.C
+fvOptions/penalisedSource/solidMasker/solidMasker.C
+fvOptions/penalisedSource/solidMasker/cellCentreSolidMasker.C
+fvOptions/penalisedSource/solidMasker/cellPointsSolidMasker.C
 
 LIB = $(FOAM_USER_LIBBIN)/libSupportStructureModels

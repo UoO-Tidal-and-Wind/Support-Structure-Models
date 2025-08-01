@@ -45,8 +45,17 @@ SourceFiles
 #include "meshSearch.H"
 #include "interpolation.H"
 #include "searchableSurfaces.H"
+#include "Function1.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Forward declare penalisedSource (we only need to know it exists)
+namespace Foam {
+namespace fv {
+    class solidMasker;
+}
+}
+
 
 namespace Foam
 {
@@ -81,7 +90,7 @@ protected:
         vector baseVelocity_;
 
         //- Centre of rotation for transformations
-        vector    centreOfRotation_;
+        vector  centreOfRotation_;
 
         //- Mesh cell search engine
         meshSearch searchEngine_;
@@ -111,6 +120,31 @@ protected:
         //- The bounding sphere for the geometries
         boundBox boundingBox_;
 
+        autoPtr<volVectorField> searchPointsPtr_;
+
+        autoPtr<Function1<vector>> rotationalDOFFuncPtr_;
+
+        autoPtr<Function1<vector>> translationalDOFFuncPtr_;
+
+        autoPtr<Function1<vector>> rotationalDOFVelocityFuncPtr_;
+
+        autoPtr<Function1<vector>> translationalDOFVelocityFuncPtr_;
+
+        vector rotationalDOF_;
+        
+        vector translationalDOF_;
+        
+        vector prevRotationalDOF_;
+        
+        vector prevTranslationalDOF_;
+
+        vector rotationalDOFVelocity_;
+
+        vector translationalDOFVelocity_;
+
+        autoPtr<solidMasker> solidMaskerPtr_;
+
+
 
     // Protected Member Functions
 
@@ -122,6 +156,8 @@ protected:
 
         //- Move the solid mask
         void updateBodyForce();
+
+        void updateDOFs();
 
         //- Read dictionary
         bool read(const dictionary& dict);
@@ -162,6 +198,23 @@ public:
     // Member functions
 
         // Access
+        vector getRotationalDOF() const;
+
+        vector getTranslationalDOF() const;
+
+        vector getCentreOfRotation() const;
+
+        bool isMoving() const;
+
+        void findVolumeType(
+            const pointField& searchPoints,
+            List<List<volumeType>>& volTypes
+        ) const;
+
+        volScalarField& getSolidMask();
+
+        //- Apply transformations to the search points
+        void applyTransformations();
 
         // Edit
 

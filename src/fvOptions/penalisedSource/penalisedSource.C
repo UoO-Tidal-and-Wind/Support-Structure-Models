@@ -24,12 +24,18 @@ License
 \*---------------------------------------------------------------------------*/
 
 #include "penalisedSource.H"
+#include "solidMasker/solidMasker.H"
 #include "addToRunTimeSelectionTable.H"
 #include "fvMatrices.H"
 #include "OFstream.H"
 #include "meshSearch.H"
 #include "interpolation.H"
 #include "meshTools.H"
+#include "unitConversion.H"
+#include "tensor.H"
+
+#include "solidMasker/cellCentreSolidMasker.H"
+#include "solidMasker/cellPointsSolidMasker.H"
 
 
 // * * * * * * * * * * * * * Static Member Functions * * * * * * * * * * * * //
@@ -61,11 +67,9 @@ bool Foam::fv::penalisedSource::read(const dictionary& dict)
         coeffs_.lookup("penalisationFactor") >> penalisationFactor_;
         moving_ = coeffs_.lookupOrDefault<bool>("moving", false);
         coeffs_.lookup("baseVelocity") >> baseVelocity_;
-        coeffs_.lookup("centreOfRotation") >> centreOfRotation_;
-
+        
         dictionary geometryDict;
         geometryDict = dict.subDict("geometry");
-
         surfacesPtr_.reset(new searchableSurfaces(
             IOobject
             (
@@ -81,6 +85,44 @@ bool Foam::fv::penalisedSource::read(const dictionary& dict)
             true
         ));
         
+
+        word maskerType = word(coeffs_.lookup("masker"));
+        if (maskerType == "cellCentre")
+        {
+            solidMaskerPtr_.reset(new cellCentreSolidMasker(mesh_));
+        }
+        else if (maskerType == "cellPoints")
+        {
+            solidMaskerPtr_.reset(new cellPointsSolidMasker(mesh_));
+        }
+        else
+        {
+            FatalErrorInFunction
+            << "Invalid masker selection: " 
+            << maskerType << abort(FatalIOError);
+        }
+        
+
+        if (moving_)
+        {
+            dictionary DOFDict;
+            DOFDict = dict.subDict("degreesOfFreedom");
+            
+            DOFDict.lookup("centreOfRotation") >> centreOfRotation_;
+            rotationalDOFFuncPtr_.reset(
+                Function1<vector>::New("rotationalDOF", DOFDict)
+            );
+            translationalDOFFuncPtr_.reset(
+                Function1<vector>::New("translationalDOF", DOFDict)
+            );
+            rotationalDOFVelocityFuncPtr_.reset(
+                Function1<vector>::New("rotationalDOFVelocity", DOFDict)
+            );
+            translationalDOFVelocityFuncPtr_.reset(
+                Function1<vector>::New("translationalDOFVelocity", DOFDict)
+            );
+        }
+        
         return true;
     }
     else
@@ -95,59 +137,125 @@ void Foam::fv::penalisedSource::writeData(Ostream& os) const
 
 void Foam::fv::penalisedSource::updateSolidMask()
 {
-    // This function could be abstracted into a class to allow for
-    // more advanced methods later on...
-    
-    solidMask_ = scalar(0.0);
-    forAll(surfacesPtr_->names(), geomi)
-    {
-        const searchableSurface& s = (*surfacesPtr_)[geomi];
-        List<volumeType> volTypes;
-
-        // perform based on cell centres (not perfect but will do for now)
-        s.getVolumeType(mesh_.C(), volTypes);
-
-        forAll(mesh_.C(), pti)
-        {
-            if (volTypes[pti] == volumeType::INSIDE)
-            {
-                solidMask_[pti] = 1.0;
-                // Info << "Point: " << pti << " Volume Type: " << "INSIDE" << endl;
-            }
-            else if (volTypes[pti] == volumeType::OUTSIDE)
-            {
-                solidMask_[pti] = Foam::max(0.0, solidMask_[pti]);
-            }
-            else if (volTypes[pti] == volumeType::MIXED)
-            {
-                // bounday points
-                solidMask_[pti] = Foam::max(1.0, solidMask_[pti]); 
-            }
-            else if (volTypes[pti] == volumeType::UNKNOWN)
-            {
-                Info << "Point " << pti << " has unkown volume type." << endl;
-            }
-        }
-
-    }
+    solidMaskerPtr_->updateMask(*this);
 }
 
 void Foam::fv::penalisedSource::updateBodyVelocity()
 {
-    // bodyVelocity_ = dimensionedVector(baseVelocity_, dimVelocity);
-    bodyVelocity_ = dimensionedVector("bodyVelocity",dimVelocity,baseVelocity_);
+    rotationalDOFVelocity_ = rotationalDOFVelocityFuncPtr_->value(runTime_.value());
+    translationalDOFVelocity_ = translationalDOFVelocityFuncPtr_->value(runTime_.value());
+
+    forAll(mesh_.C(), celli)
+    {
+        vector transU = translationalDOFVelocity_; // same for all points
+        if (solidMask_[celli] > 0.0)
+        {
+            // dimensionedVector tmp = dimensionedVector("bodyVelocity",dimVelocity,baseVelocity_);
+            vector rotU = rotationalDOFVelocity_ ^ (mesh_.C()[celli] - centreOfRotation_);
+            bodyVelocity_[celli] = baseVelocity_ + rotU + transU;
+        }
+        else
+        {
+            bodyVelocity_[celli] = vector::zero;
+        }
+    }
 }
 
 void Foam::fv::penalisedSource::updateBodyForce()
 {
-    // bodyForceLHSCoeff_ = -penalisationFactor_ * solidMask_;
-    // bodyForceLHSCoeff_ *= mesh_.V();
     forAll(mesh_.C(), celli)
     {
         bodyForceLHSCoeff_[celli] = -penalisationFactor_ * solidMask_[celli] / mesh_.V()[celli];
         bodyForceRHS_[celli] = -penalisationFactor_ * solidMask_[celli] * bodyVelocity_[celli] / mesh_.V()[celli];
     }
 }
+
+void Foam::fv::penalisedSource::applyTransformations()
+{
+    // if (moving_)
+    // {
+    //     // set previous DOFs
+    //     prevTranslationalDOF_ = translationalDOF_;
+    //     prevRotationalDOF_ = rotationalDOF_;
+
+    //     // update values for current time step
+    //     translationalDOF_ = translationalDOFFuncPtr_->value(runTime_.value());
+    //     rotationalDOF_ = rotationalDOFFuncPtr_->value(runTime_.value());
+        
+    //     // convert rotational DOF to radians
+    //     vector deltaRotationalDOF = rotationalDOF_ - prevRotationalDOF_;
+    //     vector deltaTranslationalDOF = translationalDOF_ - prevTranslationalDOF_;
+
+    //     // first apply translation to centre of rotation
+    //     centreOfRotation_ += -deltaTranslationalDOF;
+
+    //     // form rotation matrix
+    //     tensor R2 = Rx(-degToRad(deltaRotationalDOF[2]));
+    //     tensor R1 = Rx(-degToRad(deltaRotationalDOF[1]));
+    //     tensor R0 = Rx(-degToRad(deltaRotationalDOF[0]));
+    //     tensor R = R2 & R1 & R0;
+
+    //     forAll(searchPoints, pti)
+    //     {
+    //         vector& p = searchPoints[pti];
+    //         p += -deltaTranslationalDOF;
+    //         p = (R & ((p) - centreOfRotation_)) + centreOfRotation_;
+    //     }
+    // }
+}
+
+vector Foam::fv::penalisedSource::getRotationalDOF() const
+{
+    return rotationalDOF_;
+}
+
+vector Foam::fv::penalisedSource::getTranslationalDOF() const
+{
+    return translationalDOF_;
+}
+
+vector Foam::fv::penalisedSource::getCentreOfRotation() const
+{
+    return centreOfRotation_;
+}
+
+bool Foam::fv::penalisedSource::isMoving() const
+{
+    return moving_;
+}
+
+void Foam::fv::penalisedSource::updateDOFs()
+{
+    if (moving_)
+    {
+        rotationalDOF_ = rotationalDOFFuncPtr_->value(runTime_.value());
+        translationalDOF_ = translationalDOFFuncPtr_->value(runTime_.value());
+        rotationalDOFVelocity_ = rotationalDOFVelocityFuncPtr_->value(runTime_.value());
+        translationalDOFVelocity_ = translationalDOFVelocityFuncPtr_->value(runTime_.value());
+    }
+}
+
+void Foam::fv::penalisedSource::findVolumeType
+(
+    const pointField& searchPoints,
+    List<List<volumeType>>& volTypes
+) const
+{
+    volTypes.setSize(surfacesPtr_->size());
+
+    forAll(surfacesPtr_->names(), geomi)
+    {
+        const searchableSurface& s = (*surfacesPtr_)[geomi];
+        s.getVolumeType(searchPoints, volTypes[geomi]);
+    }
+}
+
+
+volScalarField& Foam::fv::penalisedSource::getSolidMask()
+{
+    return solidMask_;
+}
+
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
@@ -239,7 +347,13 @@ Foam::fv::penalisedSource::penalisedSource
         ),
         mesh_,
         dimensionedVector("bodyVelocity",dimVelocity,vector::zero)
-    )
+    ),
+    rotationalDOF_(vector::zero),
+    translationalDOF_(vector::zero),
+    prevRotationalDOF_(vector::zero),
+    prevTranslationalDOF_(vector::zero),
+    rotationalDOFVelocity_(vector::zero),
+    translationalDOFVelocity_(vector::zero)
 {
     read(dict);
     
@@ -253,9 +367,33 @@ Foam::fv::penalisedSource::penalisedSource
     Info << endl;
     
     boundingBox_ = surfacesPtr_->bounds();
+    searchPointsPtr_.reset
+    (
+        new volVectorField(mesh_.C())
+    );
 
+    if (moving_)
+    {
+        applyTransformations();
+    }
     updateSolidMask();
     updateBodyVelocity();
+
+    if (moving_)
+    {
+        forAll(mesh_.C(), celli)
+        {
+            if (solidMask_[celli] > 0.0)
+            {
+                bodyVelocity_[celli] = baseVelocity_;
+            }
+            else
+            {
+                bodyVelocity_[celli] = vector::zero;
+            }
+        }
+    }
+
 }
 
 
@@ -273,9 +411,11 @@ void Foam::fv::penalisedSource::addSup
     const label fieldI
 )
 {
+    updateDOFs();
     // check if the source is moving
     if (moving_)
     {
+        applyTransformations();
         updateSolidMask();
         updateBodyVelocity();
         updateBodyForce();
