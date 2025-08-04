@@ -22,11 +22,11 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::fv::penalisedSource
+    Foam::fv::cellPointsSolidMasker
 
 Description
-    Class implements the penalised momentum source for immersed boundary representation
-    of a moving body.
+    Class implements functions to update the solid mask of an immersed body using
+    the cell points of each cell.
 
 SourceFiles
     penalisedSource.C
@@ -65,20 +65,26 @@ class cellPointsSolidMasker
     public solidMasker
 {
 protected:
+    //Protected data
+        //- Search points
+        pointField searchPoints_;
 
-    pointField searchPoints_;
-
-    pointField transformedSearchPoints_;
+        //- Transformed search points
+        pointField transformedSearchPoints_;
 
 public:
+    //Constructors
     cellPointsSolidMasker
     (
         const fvMesh& mesh
     );
 
+    //Destructor
     virtual ~cellPointsSolidMasker();
-
-    virtual void updateMask(penalisedSource& source) override;
+    
+    //Member functions
+        //- Update the solid mask of a penalisedSource
+        virtual void updateMask(penalisedSource& source) override;
 };
 
 
