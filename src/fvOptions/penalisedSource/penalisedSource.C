@@ -145,9 +145,6 @@ void Foam::fv::penalisedSource::updateBodyVelocity()
 {
     if (moving_)
     {
-        rotationalDOFVelocity_ = rotationalDOFVelocityFuncPtr_->value(runTime_.value());
-        translationalDOFVelocity_ = translationalDOFVelocityFuncPtr_->value(runTime_.value());
-    
         forAll(mesh_.C(), celli)
         {
             vector transU = translationalDOFVelocity_; // same for all points
@@ -335,8 +332,6 @@ Foam::fv::penalisedSource::penalisedSource
     ),
     rotationalDOF_(vector::zero),
     translationalDOF_(vector::zero),
-    prevRotationalDOF_(vector::zero),
-    prevTranslationalDOF_(vector::zero),
     rotationalDOFVelocity_(vector::zero),
     translationalDOFVelocity_(vector::zero)
 {

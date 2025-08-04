@@ -49,7 +49,7 @@ SourceFiles
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// Forward declare penalisedSource (we only need to know it exists)
+// Forward declare penalisedSource
 namespace Foam {
 namespace fv {
     class solidMasker;
@@ -117,29 +117,32 @@ protected:
         // searchableSurfaces solidGeometry_;
         autoPtr<searchableSurfaces> surfacesPtr_;
 
+        // - Function1 for rotational DOF
         autoPtr<Function1<vector>> rotationalDOFFuncPtr_;
 
+        // - Function1 for translational DOF
         autoPtr<Function1<vector>> translationalDOFFuncPtr_;
 
+        //- Function1 for rotational DOF velocity
         autoPtr<Function1<vector>> rotationalDOFVelocityFuncPtr_;
 
+        //- Function1 for translational DOF velocity
         autoPtr<Function1<vector>> translationalDOFVelocityFuncPtr_;
 
+        //- Rotational DOF (roll, pitch, yaw)
         vector rotationalDOF_;
         
+        //- Translational DOF
         vector translationalDOF_;
         
-        vector prevRotationalDOF_;
-        
-        vector prevTranslationalDOF_;
-
+        //- rotational DOF velocity 
         vector rotationalDOFVelocity_;
 
+        //- translational DOF velocity
         vector translationalDOFVelocity_;
 
+        //- Pointer to solidMasker
         autoPtr<solidMasker> solidMaskerPtr_;
-
-
 
     // Protected Member Functions
 
@@ -193,26 +196,28 @@ public:
     // Member functions
 
         // Access
-        vector getRotationalDOF() const;
+            //- Return rotational DOF
+            vector getRotationalDOF() const;
 
-        vector getTranslationalDOF() const;
+            //- Return translational DOF
+            vector getTranslationalDOF() const;
 
-        vector getCentreOfRotation() const;
+            //- Return centre of rotation
+            vector getCentreOfRotation() const;
 
-        bool isMoving() const;
+            //- Return if the source is moving
+            bool isMoving() const;
 
-        void findVolumeType(
-            const pointField& searchPoints,
-            List<List<volumeType>>& volTypes
-        ) const;
+            //- For a given point field, store the corresponding volume type
+            // in a List of Lists
+            void findVolumeType(
+                const pointField& searchPoints,
+                List<List<volumeType>>& volTypes
+            ) const;
 
-        volScalarField& getSolidMask();
+            //- Return reference to solid mask
+            volScalarField& getSolidMask();
 
-        // Edit
-
-        // Evaluation
-
-        // IO
 
         // Source term addition
 

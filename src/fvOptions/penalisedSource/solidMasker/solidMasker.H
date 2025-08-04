@@ -22,11 +22,10 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::fv::penalisedSource
+    Foam::fv::solidMasker
 
 Description
-    Class implements the penalised momentum source for immersed boundary representation
-    of a moving body.
+    Class implements functions to update the solid mask of an immersed body.
 
 SourceFiles
     penalisedSource.C
@@ -46,9 +45,8 @@ SourceFiles
 #include "interpolation.H"
 #include "searchableSurfaces.H"
 #include "Function1.H"
-// #include "../penalisedSource.H"
 
-// Forward declare penalisedSource (we only need to know it exists)
+// Forward declare penalisedSource
 namespace Foam {
 namespace fv {
     class penalisedSource;
@@ -67,14 +65,19 @@ protected:
     const Time& runTime_;
         
 public:
+    //Constructor
     solidMasker
     (
         const fvMesh& mesh
     );
-
+    
+    //Destructor
     virtual ~solidMasker();
 
-    virtual void updateMask(penalisedSource& source) = 0;
+    // Member functions
+        
+        //- Update the solid mask of a penalisedSource 
+        virtual void updateMask(penalisedSource& source) = 0;
 };
 
 
