@@ -117,11 +117,6 @@ protected:
         // searchableSurfaces solidGeometry_;
         autoPtr<searchableSurfaces> surfacesPtr_;
 
-        //- The bounding sphere for the geometries
-        boundBox boundingBox_;
-
-        autoPtr<volVectorField> searchPointsPtr_;
-
         autoPtr<Function1<vector>> rotationalDOFFuncPtr_;
 
         autoPtr<Function1<vector>> translationalDOFFuncPtr_;
@@ -212,9 +207,6 @@ public:
         ) const;
 
         volScalarField& getSolidMask();
-
-        //- Apply transformations to the search points
-        void applyTransformations();
 
         // Edit
 

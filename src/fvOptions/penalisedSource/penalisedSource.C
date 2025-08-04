@@ -137,26 +137,44 @@ void Foam::fv::penalisedSource::writeData(Ostream& os) const
 
 void Foam::fv::penalisedSource::updateSolidMask()
 {
+
     solidMaskerPtr_->updateMask(*this);
 }
 
 void Foam::fv::penalisedSource::updateBodyVelocity()
 {
-    rotationalDOFVelocity_ = rotationalDOFVelocityFuncPtr_->value(runTime_.value());
-    translationalDOFVelocity_ = translationalDOFVelocityFuncPtr_->value(runTime_.value());
-
-    forAll(mesh_.C(), celli)
+    if (moving_)
     {
-        vector transU = translationalDOFVelocity_; // same for all points
-        if (solidMask_[celli] > 0.0)
+        rotationalDOFVelocity_ = rotationalDOFVelocityFuncPtr_->value(runTime_.value());
+        translationalDOFVelocity_ = translationalDOFVelocityFuncPtr_->value(runTime_.value());
+    
+        forAll(mesh_.C(), celli)
         {
-            // dimensionedVector tmp = dimensionedVector("bodyVelocity",dimVelocity,baseVelocity_);
-            vector rotU = rotationalDOFVelocity_ ^ (mesh_.C()[celli] - centreOfRotation_);
-            bodyVelocity_[celli] = baseVelocity_ + rotU + transU;
+            vector transU = translationalDOFVelocity_; // same for all points
+            if (solidMask_[celli] > 0.0)
+            {
+                // dimensionedVector tmp = dimensionedVector("bodyVelocity",dimVelocity,baseVelocity_);
+                vector rotU = rotationalDOFVelocity_ ^ (mesh_.C()[celli] - centreOfRotation_);
+                bodyVelocity_[celli] = baseVelocity_ + rotU + transU;
+            }
+            else
+            {
+                bodyVelocity_[celli] = vector::zero;
+            }
         }
-        else
+    }
+    else
+    {
+        forAll(mesh_.C(), celli)
         {
-            bodyVelocity_[celli] = vector::zero;
+            if (solidMask_[celli] > 0.0)
+            {
+                bodyVelocity_[celli] = baseVelocity_;
+            }
+            else
+            {
+                bodyVelocity_[celli] = vector::zero;
+            }
         }
     }
 }
@@ -170,39 +188,6 @@ void Foam::fv::penalisedSource::updateBodyForce()
     }
 }
 
-void Foam::fv::penalisedSource::applyTransformations()
-{
-    // if (moving_)
-    // {
-    //     // set previous DOFs
-    //     prevTranslationalDOF_ = translationalDOF_;
-    //     prevRotationalDOF_ = rotationalDOF_;
-
-    //     // update values for current time step
-    //     translationalDOF_ = translationalDOFFuncPtr_->value(runTime_.value());
-    //     rotationalDOF_ = rotationalDOFFuncPtr_->value(runTime_.value());
-        
-    //     // convert rotational DOF to radians
-    //     vector deltaRotationalDOF = rotationalDOF_ - prevRotationalDOF_;
-    //     vector deltaTranslationalDOF = translationalDOF_ - prevTranslationalDOF_;
-
-    //     // first apply translation to centre of rotation
-    //     centreOfRotation_ += -deltaTranslationalDOF;
-
-    //     // form rotation matrix
-    //     tensor R2 = Rx(-degToRad(deltaRotationalDOF[2]));
-    //     tensor R1 = Rx(-degToRad(deltaRotationalDOF[1]));
-    //     tensor R0 = Rx(-degToRad(deltaRotationalDOF[0]));
-    //     tensor R = R2 & R1 & R0;
-
-    //     forAll(searchPoints, pti)
-    //     {
-    //         vector& p = searchPoints[pti];
-    //         p += -deltaTranslationalDOF;
-    //         p = (R & ((p) - centreOfRotation_)) + centreOfRotation_;
-    //     }
-    // }
-}
 
 vector Foam::fv::penalisedSource::getRotationalDOF() const
 {
@@ -366,34 +351,9 @@ Foam::fv::penalisedSource::penalisedSource
     }
     Info << endl;
     
-    boundingBox_ = surfacesPtr_->bounds();
-    searchPointsPtr_.reset
-    (
-        new volVectorField(mesh_.C())
-    );
-
-    if (moving_)
-    {
-        applyTransformations();
-    }
+    updateDOFs();
     updateSolidMask();
     updateBodyVelocity();
-
-    if (moving_)
-    {
-        forAll(mesh_.C(), celli)
-        {
-            if (solidMask_[celli] > 0.0)
-            {
-                bodyVelocity_[celli] = baseVelocity_;
-            }
-            else
-            {
-                bodyVelocity_[celli] = vector::zero;
-            }
-        }
-    }
-
 }
 
 
@@ -411,15 +371,13 @@ void Foam::fv::penalisedSource::addSup
     const label fieldI
 )
 {
-    updateDOFs();
-    // check if the source is moving
     if (moving_)
     {
-        applyTransformations();
+        updateDOFs();
         updateSolidMask();
         updateBodyVelocity();
-        updateBodyForce();
     }
+    updateBodyForce();
 
     // add term to the LHS of the momentum equation
     const volVectorField& U = eqn.psi();
