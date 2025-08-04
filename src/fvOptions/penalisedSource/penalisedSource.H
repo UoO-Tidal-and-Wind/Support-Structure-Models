@@ -78,7 +78,7 @@ protected:
         const Time& runTime_;
 
         //- Output file stream
-        OFstream* outputFile_;
+        OFstream* forceOutputFile_;
 
         //- Penalisation factor (lambda)
         scalar  penalisationFactor_;
@@ -163,6 +163,12 @@ protected:
         //- Write data to output stream
         virtual void writeData(Ostream& os) const;
 
+        //- Create directory for saving outputs to
+        void createOutputFile();
+
+        //- Write to output file
+        virtual void writeOutput();
+
 public:
 
     //- Runtime type information
@@ -217,7 +223,6 @@ public:
 
             //- Return reference to solid mask
             volScalarField& getSolidMask();
-
 
         // Source term addition
 

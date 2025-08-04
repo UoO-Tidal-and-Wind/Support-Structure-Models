@@ -133,6 +133,8 @@ bool Foam::fv::penalisedSource::read(const dictionary& dict)
 
 void Foam::fv::penalisedSource::writeData(Ostream& os) const
 {
+    os  << indent << name_ << endl;
+    dict_.write(os);
 }
 
 void Foam::fv::penalisedSource::updateSolidMask()
@@ -237,6 +239,38 @@ volScalarField& Foam::fv::penalisedSource::getSolidMask()
 {
     return solidMask_;
 }
+
+
+void Foam::fv::penalisedSource::createOutputFile()
+{
+    fileName dir;
+    if (Pstream::parRun())
+    {
+        dir = runTime_.path()/"../postProcessing/IBMForce"
+            / runTime_.timeName();
+    }
+    else
+    {
+        dir = runTime_.path()/"postProcessing/IBMForce"
+            / runTime_.timeName();
+    }
+
+    if (not isDir(dir))
+    {
+        mkDir(dir);
+    }
+    forceOutputFile_ = new OFstream(dir/name_);
+    *forceOutputFile_ << "time\tbodyForceX\tbodyForceY\tbodyForceZ\t" << endl;
+}
+
+void Foam::fv::penalisedSource::writeOutput()
+{
+    vector totForce = returnReduce(sum(bodyForce_).value(),sumOp<vector>());
+    *forceOutputFile_ << runTime_.value()  << "\t"
+             << totForce[0] << "\t" << totForce[1] 
+             << "\t" << totForce[2] << "\t" << endl;
+}
+
 
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
@@ -349,6 +383,8 @@ Foam::fv::penalisedSource::penalisedSource
     updateDOFs();
     updateSolidMask();
     updateBodyVelocity();
+
+    createOutputFile();
 }
 
 
@@ -381,6 +417,8 @@ void Foam::fv::penalisedSource::addSup
 
     bodyForceLHS_ = bodyForceLHSCoeff_ * U;
     bodyForce_ = bodyForceLHS_ + bodyForceRHS_;
+
+    writeOutput();
 }
 
 
