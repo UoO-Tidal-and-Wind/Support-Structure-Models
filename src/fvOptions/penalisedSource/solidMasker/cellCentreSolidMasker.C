@@ -57,8 +57,8 @@ void Foam::fv::cellCentreSolidMasker::updateMask(penalisedSource& source)
         vector centreOfRotation = source.getCentreOfRotation();
 
         tensor R0 = Rx(-degToRad(rotationalDOF[0]));
-        tensor R1 = Rx(-degToRad(rotationalDOF[1]));
-        tensor R2 = Rx(-degToRad(rotationalDOF[2]));
+        tensor R1 = Ry(-degToRad(rotationalDOF[1]));
+        tensor R2 = Rz(-degToRad(rotationalDOF[2]));
         tensor R = R2 & R1 & R0;
 
         // translate points
