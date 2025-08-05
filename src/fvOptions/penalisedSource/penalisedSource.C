@@ -33,9 +33,12 @@ License
 #include "meshTools.H"
 #include "unitConversion.H"
 #include "tensor.H"
+#include "clockValue.H"
 
 #include "solidMasker/cellCentreSolidMasker.H"
 #include "solidMasker/cellPointsSolidMasker.H"
+
+#define TIMING_MSG(msg) if (showTiming_) Info << msg
 
 
 // * * * * * * * * * * * * * Static Member Functions * * * * * * * * * * * * //
@@ -67,6 +70,7 @@ bool Foam::fv::penalisedSource::read(const dictionary& dict)
         coeffs_.lookup("penalisationFactor") >> penalisationFactor_;
         moving_ = coeffs_.lookupOrDefault<bool>("moving", false);
         coeffs_.lookup("baseVelocity") >> baseVelocity_;
+        showTiming_ = coeffs_.lookupOrDefault<bool>("showTiming", false);
         
         dictionary geometryDict;
         geometryDict = dict.subDict("geometry");
@@ -402,23 +406,40 @@ void Foam::fv::penalisedSource::addSup
     const label fieldI
 )
 {
+    clockTime timing;
+    TIMING_MSG("Timing:\n");
+
     if (moving_)
     {
+        TIMING_MSG("   updateDOFs"); 
         updateDOFs();
+        TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
+        
+        TIMING_MSG("   updateSolidMask");
         updateSolidMask();
+        TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
+
+        TIMING_MSG("   updateBodyVelocity");
         updateBodyVelocity();
+        TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
     }
+
+    TIMING_MSG("   updateBodyForce"); 
     updateBodyForce();
+    TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
 
     // add term to the LHS of the momentum equation
     const volVectorField& U = eqn.psi();
-    eqn -= fvm::Sp(bodyForceLHSCoeff_,U);
+    eqn -= fvm::Sp(bodyForceLHSCoeff_, U);
     eqn -= bodyForceRHS_;
 
     bodyForceLHS_ = bodyForceLHSCoeff_ * U;
     bodyForce_ = bodyForceLHS_ + bodyForceRHS_;
 
+    TIMING_MSG("   writeOutput"); 
     writeOutput();
+    TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
+    TIMING_MSG("addSup: Done (" << timing.elapsedTime() << "s)\n");
 }
 
 
