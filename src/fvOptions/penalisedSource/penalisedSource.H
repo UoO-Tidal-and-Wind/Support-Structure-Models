@@ -144,6 +144,9 @@ protected:
         //- Pointer to solidMasker
         autoPtr<solidMasker> solidMaskerPtr_;
 
+        //- Flag to show function timings
+        bool showTiming_;
+
     // Protected Member Functions
 
         //- Move the solid mask
