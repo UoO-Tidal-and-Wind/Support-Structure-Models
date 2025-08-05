@@ -147,6 +147,9 @@ protected:
         //- Flag to show function timings
         bool showTiming_;
 
+        //- Density for force calculations
+        scalar referenceDensity_;
+
     // Protected Member Functions
 
         //- Move the solid mask

@@ -71,6 +71,7 @@ bool Foam::fv::penalisedSource::read(const dictionary& dict)
         moving_ = coeffs_.lookupOrDefault<bool>("moving", false);
         coeffs_.lookup("baseVelocity") >> baseVelocity_;
         showTiming_ = coeffs_.lookupOrDefault<bool>("showTiming", false);
+        coeffs_.lookup("referenceDensity") >> referenceDensity_;
         
         dictionary geometryDict;
         geometryDict = dict.subDict("geometry");
@@ -269,7 +270,14 @@ void Foam::fv::penalisedSource::createOutputFile()
 
 void Foam::fv::penalisedSource::writeOutput()
 {
-    vector totForce = returnReduce(sum(bodyForce_).value(),sumOp<vector>());
+    vector totForce = vector(0,0,0);
+    forAll(bodyForce_, cellI)
+    {
+        totForce += bodyForce_[cellI] * mesh_.V()[cellI] * referenceDensity_;
+    }
+    reduce(totForce, sumOp<vector>());
+
+    // vector totForce = returnReduce(sum(bodyForce_).value(),sumOp<vector>()) * referenceDensity_;
     *forceOutputFile_ << runTime_.value()  << "\t"
              << totForce[0] << "\t" << totForce[1] 
              << "\t" << totForce[2] << "\t" << endl;
