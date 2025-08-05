@@ -277,7 +277,6 @@ void Foam::fv::penalisedSource::writeOutput()
     }
     reduce(totForce, sumOp<vector>());
 
-    // vector totForce = returnReduce(sum(bodyForce_).value(),sumOp<vector>()) * referenceDensity_;
     *forceOutputFile_ << runTime_.value()  << "\t"
              << totForce[0] << "\t" << totForce[1] 
              << "\t" << totForce[2] << "\t" << endl;
@@ -442,7 +441,7 @@ void Foam::fv::penalisedSource::addSup
     eqn -= bodyForceRHS_;
 
     bodyForceLHS_ = bodyForceLHSCoeff_ * U;
-    bodyForce_ = bodyForceLHS_ + bodyForceRHS_;
+    bodyForce_ = bodyForceLHS_ - bodyForceRHS_;
 
     TIMING_MSG("   writeOutput"); 
     writeOutput();
