@@ -187,8 +187,8 @@ void Foam::fv::penalisedSource::updateBodyForce()
 {
     forAll(mesh_.C(), celli)
     {
-        bodyForceLHSCoeff_[celli] = -penalisationFactor_ * solidMask_[celli] / mesh_.V()[celli];
-        bodyForceRHS_[celli] = -penalisationFactor_ * solidMask_[celli] * bodyVelocity_[celli] / mesh_.V()[celli];
+        bodyForceLHSCoeff_[celli] = penalisationFactor_ * solidMask_[celli] / mesh_.V()[celli];
+        bodyForceRHS_[celli] = penalisationFactor_ * solidMask_[celli] * bodyVelocity_[celli] / mesh_.V()[celli];
     }
 }
 
@@ -437,11 +437,11 @@ void Foam::fv::penalisedSource::addSup
 
     // add term to the LHS of the momentum equation
     const volVectorField& U = eqn.psi();
-    eqn -= fvm::Sp(bodyForceLHSCoeff_, U);
-    eqn -= bodyForceRHS_;
+    eqn += fvm::Sp(bodyForceLHSCoeff_, U);
+    eqn += bodyForceRHS_;
 
     bodyForceLHS_ = bodyForceLHSCoeff_ * U;
-    bodyForce_ = bodyForceLHS_ - bodyForceRHS_;
+    bodyForce_ = bodyForceRHS_ - bodyForceLHS_;
 
     TIMING_MSG("   writeOutput"); 
     writeOutput();
