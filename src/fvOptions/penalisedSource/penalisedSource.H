@@ -80,6 +80,9 @@ protected:
         //- Output file stream
         OFstream* forceOutputFile_;
 
+        //- Output file stream
+        OFstream* DOFOutputFile_;
+
         //- Penalisation factor (lambda)
         scalar  penalisationFactor_;
 

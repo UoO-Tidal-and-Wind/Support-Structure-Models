@@ -248,24 +248,37 @@ volScalarField& Foam::fv::penalisedSource::getSolidMask()
 
 void Foam::fv::penalisedSource::createOutputFile()
 {
-    fileName dir;
+    fileName dirForce;
+    fileName dirDOF;
     if (Pstream::parRun())
     {
-        dir = runTime_.path()/"../postProcessing/IBMForce"
+        dirForce = runTime_.path()/"../postProcessing/IBMForce"
             / runTime_.timeName();
+        dirDOF = runTime_.path()/"../postProcessing/IBMDOF"
+        / runTime_.timeName();
     }
     else
     {
-        dir = runTime_.path()/"postProcessing/IBMForce"
+        dirForce = runTime_.path()/"postProcessing/IBMForce"
+            / runTime_.timeName();
+        dirDOF = runTime_.path()/"postProcessing/IBMDOF"
             / runTime_.timeName();
     }
 
-    if (not isDir(dir))
+    if (not isDir(dirForce))
     {
-        mkDir(dir);
+        mkDir(dirForce);
     }
-    forceOutputFile_ = new OFstream(dir/name_);
+    if (not isDir(dirDOF))
+    {
+        mkDir(dirDOF);
+    }
+
+    forceOutputFile_ = new OFstream(dirForce/name_);
     *forceOutputFile_ << "time\tbodyForceX\tbodyForceY\tbodyForceZ\t" << endl;
+
+    DOFOutputFile_ = new OFstream(dirDOF/name_);
+    *DOFOutputFile_ << "time\tX\tY\tZ\troll\tpitch\tyaw\t" << endl;
 }
 
 void Foam::fv::penalisedSource::writeOutput()
@@ -280,6 +293,15 @@ void Foam::fv::penalisedSource::writeOutput()
     *forceOutputFile_ << runTime_.value()  << "\t"
              << totForce[0] << "\t" << totForce[1] 
              << "\t" << totForce[2] << "\t" << endl;
+
+    *DOFOutputFile_ << runTime_.value()  << "\t"
+                << translationalDOF_[0] << "\t"
+                << translationalDOF_[1] << "\t"
+                << translationalDOF_[2] << "\t"
+                << rotationalDOF_[0] << "\t"
+                << rotationalDOF_[1] << "\t"
+                << rotationalDOF_[2] << "\t"
+                << endl;
 }
 
 
