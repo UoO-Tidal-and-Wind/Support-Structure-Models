@@ -3,4 +3,6 @@ fvOptions/penalisedSource/solidMasker/solidMasker.C
 fvOptions/penalisedSource/solidMasker/cellCentreSolidMasker.C
 fvOptions/penalisedSource/solidMasker/cellPointsSolidMasker.C
 
+functionObjects/IBMForces/IBMForces.C
+
 LIB = $(FOAM_USER_LIBBIN)/libSupportStructureModels
