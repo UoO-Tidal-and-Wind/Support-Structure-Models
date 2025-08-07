@@ -152,13 +152,14 @@ void Foam::fv::penalisedSource::updateBodyVelocity()
 {
     if (moving_)
     {
-    	constexpr scalar dToR = Foam::constant::mathematical::pi / 180.0;
+        constexpr scalar dToR = Foam::constant::mathematical::pi / 180.0;
+        const vector shiftedCentreOfRotation = centreOfRotation_ + translationalDOF_;
         forAll(mesh_.C(), celli)
         {
             vector transU = translationalDOFVelocity_; // same for all points
             if (solidMask_[celli] > 0.0)
             {   
-                vector rotU = (rotationalDOFVelocity_ * dToR) ^ (mesh_.C()[celli] - centreOfRotation_);
+                vector rotU = (rotationalDOFVelocity_ * dToR) ^ (mesh_.C()[celli] - shiftedCentreOfRotation);
                 bodyVelocity_[celli] = baseVelocity_ + rotU + transU;
             }
             else
@@ -275,7 +276,7 @@ void Foam::fv::penalisedSource::createOutputFile()
     }
 
     forceOutputFile_ = new OFstream(dirForce/name_);
-    *forceOutputFile_ << "time\tbodyForceX\tbodyForceY\tbodyForceZ\t" << endl;
+    *forceOutputFile_ << "time\tbodyForceX\tbodyForceY\tbodyForceZ\tintertialBodyForceX\tintertialBodyForceY\tintertialBodyForceZ\tadjustedBodyForceX\tadjustedBodyForceY\tadjustedBodyForceZ\t" << endl;
 
     DOFOutputFile_ = new OFstream(dirDOF/name_);
     *DOFOutputFile_ << "time\tX\tY\tZ\troll\tpitch\tyaw\t" << endl;
@@ -283,16 +284,35 @@ void Foam::fv::penalisedSource::createOutputFile()
 
 void Foam::fv::penalisedSource::writeOutput()
 {
+    // compute acceleration of DOF using central difference
+    constexpr scalar dToR = Foam::constant::mathematical::pi / 180.0;
+    scalar dt = runTime_.deltaT().value();
+    scalar t = runTime_.value();
+    vector translationalDOFAcc = (translationalDOFFuncPtr_->value(t+dt)
+                                - translationalDOFFuncPtr_->value(t-dt))/(2.0*dt);
+    vector rotationalDOFAcc = (rotationalDOFFuncPtr_->value(t+dt)
+                                - rotationalDOFFuncPtr_->value(t-dt))/(2.0*dt);
+
+    const vector shiftedCentreOfRotation = centreOfRotation_ + translationalDOF_;
+
+    vector totInertialForce = vector(0,0,0);
     vector totForce = vector(0,0,0);
     forAll(bodyForce_, cellI)
-    {
-        totForce += bodyForce_[cellI] * mesh_.V()[cellI] * referenceDensity_;
+    {   
+        if (solidMask_[cellI] > 0.0)
+        { 
+            totForce += bodyForce_[cellI] * mesh_.V()[cellI] * referenceDensity_;
+            totInertialForce += (((rotationalDOFAcc * dToR) ^ (mesh_.C()[cellI] - shiftedCentreOfRotation)) + translationalDOFAcc) * mesh_.V()[cellI] * referenceDensity_;
+        }
     }
     reduce(totForce, sumOp<vector>());
+    reduce(totInertialForce, sumOp<vector>());
 
     *forceOutputFile_ << runTime_.value()  << "\t"
-             << totForce[0] << "\t" << totForce[1] 
-             << "\t" << totForce[2] << "\t" << endl;
+            << totForce[0] << "\t" << totForce[1] << "\t" << totForce[2] << "\t"
+            << totInertialForce[0] << "\t" << totInertialForce[1] << "\t" << totInertialForce[2] << "\t"
+            << totForce[0] - totInertialForce[0] << "\t" << totForce[1] - totInertialForce[1] << "\t" << totForce[2] - totInertialForce[2] << "\t"
+            << endl;
 
     *DOFOutputFile_ << runTime_.value()  << "\t"
                 << translationalDOF_[0] << "\t"
