@@ -152,13 +152,13 @@ void Foam::fv::penalisedSource::updateBodyVelocity()
 {
     if (moving_)
     {
+    	constexpr scalar dToR = Foam::constant::mathematical::pi / 180.0;
         forAll(mesh_.C(), celli)
         {
             vector transU = translationalDOFVelocity_; // same for all points
             if (solidMask_[celli] > 0.0)
-            {
-                // dimensionedVector tmp = dimensionedVector("bodyVelocity",dimVelocity,baseVelocity_);
-                vector rotU = rotationalDOFVelocity_ ^ (mesh_.C()[celli] - centreOfRotation_);
+            {   
+                vector rotU = (rotationalDOFVelocity_ * dToR) ^ (mesh_.C()[celli] - centreOfRotation_);
                 bodyVelocity_[celli] = baseVelocity_ + rotU + transU;
             }
             else
