@@ -56,20 +56,17 @@ void Foam::fv::cellPointsSolidMasker::updateMask(penalisedSource& source)
         vector translationalDOF = source.getTranslationalDOF();
         vector centreOfRotation = source.getCentreOfRotation();
 
-        tensor R0 = Rx(-degToRad(rotationalDOF[0]));
-        tensor R1 = Ry(-degToRad(rotationalDOF[1]));
-        tensor R2 = Rz(-degToRad(rotationalDOF[2]));
-        tensor R = R2 & R1 & R0;
+        // use positive so that:
+        // pitch moves +z towards +x
+        // roll moves +z towards +y
+        tensor R0 = Rx(degToRad(rotationalDOF[0]));
+        tensor R1 = Ry(degToRad(rotationalDOF[1]));
+        tensor R2 = Rz(degToRad(rotationalDOF[2]));
+        tensor R = (R2 & (R1 & R0));
 
-        // translate points
-        vector shiftedCentre = centreOfRotation -translationalDOF;
+        transformedSearchPoints_ = (R & (searchPoints_ - centreOfRotation)) + centreOfRotation;
+        transformedSearchPoints_ -= translationalDOF;
 
-        forAll(searchPoints_, pti)
-        {
-            transformedSearchPoints_[pti] = 
-                (R & (searchPoints_[pti] - translationalDOF - shiftedCentre))
-                 + shiftedCentre;
-        }
     }
 
     List<List<volumeType>> volTypes;

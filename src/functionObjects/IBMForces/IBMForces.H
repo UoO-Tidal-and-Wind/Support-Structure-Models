@@ -25,23 +25,23 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::functionObjects::forces
+    Foam::functionObjects::IBMForces
 
 Group
-    grpForcesFunctionObjects
+    grpIBMForcesFunctionObjects
 
 Description
-    Computes forces and moments over a given list of patches by integrating
-    pressure and viscous forces and moments, and optionally resistance forces
+    Computes IBMForces and moments over a given list of patches by integrating
+    pressure and viscous IBMForces and moments, and optionally resistance IBMForces
     and moments from porous zones.
 
-    Forces and moments are output in their total and constituent components:
-    - total forces and moments
+    IBMForces and moments are output in their total and constituent components:
+    - total IBMForces and moments
     - pressure contributions
     - viscous contributions
     - porous resistance contributions (optional)
 
-    Forces and moments can be computed and output in:
+    IBMForces and moments can be computed and output in:
     - the global Cartesian coordinate system (default)
     - a user-defined Cartesian coordinate system
 
@@ -55,7 +55,7 @@ Description
 
     where \c \<file\>s:
     \verbatim
-      force.dat        | Forces
+      force.dat        | IBMForces
       moment.dat       | Moments
     \endverbatim
 
@@ -71,8 +71,8 @@ Usage
     <namePrefix>
     {
         // Mandatory entries
-        type                forces;
-        libs                (forces);
+        type                IBMForces;
+        libs                (IBMForces);
         patches             (<wordRes>);
 
         // Optional entries
@@ -88,7 +88,7 @@ Usage
 
 
             // Cartesian coordinate system specification when
-            // evaluating forces and moments, either of the below
+            // evaluating IBMForces and moments, either of the below
 
             // Define the centre of rotation
             // with implicit directions e1=(1 0 0) and e3=(0 0 1)
@@ -128,8 +128,8 @@ Usage
     where the entries mean:
     \table
       Property   | Description               | Type | Reqd    | Deflt
-      type       | Type name: forces         | word | yes     | -
-      libs       | Library name: forces      | word | yes     | -
+      type       | Type name: IBMForces         | word | yes     | -
+      libs       | Library name: IBMForces      | word | yes     | -
       patches    | Names of operand patches  | wordRes | yes  | -
       directForceDensity | Flag to directly supply force density <!--
                  -->                         | bool | no      | false
@@ -163,12 +163,12 @@ Note
   - If a \c coordinateSystem entry exists, it is taken in favour of \c CofR.
 
 SourceFiles
-    forces.C
+    IBMForces.C
 
 \*---------------------------------------------------------------------------*/
 
-#ifndef Foam_functionObjects_forces_H
-#define Foam_functionObjects_forces_H
+#ifndef Foam_functionObjects_IBMForces_H
+#define Foam_functionObjects_IBMForces_H
 
 #include "fvMeshFunctionObject.H"
 #include "writeFile.H"
@@ -184,10 +184,10 @@ namespace functionObjects
 {
 
 /*---------------------------------------------------------------------------*\
-                           Class forces Declaration
+                           Class IBMForces Declaration
 \*---------------------------------------------------------------------------*/
 
-class forces
+class IBMForces
 :
     public fvMeshFunctionObject,
     public writeFile
@@ -195,91 +195,38 @@ class forces
 protected:
 
     // Protected Data
-
+        
+        //- Pointers to runTime
+        const Time& runTime_;
+        
         // Fields
 
-            //- Sum of patch pressure forces
-            vector sumPatchForcesP_;
+            //- Sum of patch pressure IBMForces
+            List<vector> sumIBMForces_;
 
-            //- Sum of patch viscous forces
-            vector sumPatchForcesV_;
+            List<vector> sumIBMInertForces_;
 
-            //- Sum of patch pressure moments
-            vector sumPatchMomentsP_;
+            List<const volVectorField*> IBMForceFieldPtrs_;
 
-            //- Sum of patch viscous moments
-            vector sumPatchMomentsV_;
-
-            //- Sum of internal forces
-            vector sumInternalForces_;
-
-            //- Sum of internal moments
-            vector sumInternalMoments_;
-
+            List<const volVectorField*> IBMInertForceFieldPtrs_;
 
         // File streams
 
-            //- File stream for forces
-            autoPtr<OFstream> forceFilePtr_;
-
-            //- File stream for moments
-            autoPtr<OFstream> momentFilePtr_;
-
+            List<OFstream*> forceFiles_;
 
         // Read from dictionary
 
-            //- Coordinate system used when evaluating forces and moments
-            autoPtr<coordinateSystem> coordSysPtr_;
-
-            //- Names of operand patches
-            labelHashSet patchSet_;
-
             //- Reference density needed for incompressible calculations
-            scalar rhoRef_;
+            scalar referenceDensity_;
 
-            //- Reference pressure
-            scalar pRef_;
-
-            //- Name of pressure field
-            word pName_;
-
-            //- Name of velocity field
-            word UName_;
-
-            //- Name of density field
-            word rhoName_;
-
-            //- Name of force density field
-            word fDName_;
-
-            //- Flag to directly supply force density
-            bool directForceDensity_;
-
-            //- Flag to include porosity effects
-            bool porosity_;
-
-            //- Flag to write force and moment fields
-            bool writeFields_;
+            //- List of IBM object names to calcualte force of
+            wordList IBMObjectNames_;
 
             //- Flag of initialisation (internal)
             bool initialised_;
 
 
     // Protected Member Functions
-
-        //- Set the co-ordinate system from dictionary and axes names
-        void setCoordinateSystem
-        (
-            const dictionary& dict,
-            const word& e3Name = word::null,
-            const word& e1Name = word::null
-        );
-
-        //- Return access to the force field
-        volVectorField& force();
-
-        //- Return access to the moment field
-        volVectorField& moment();
 
         //- Initialise containers and fields
         void initialise();
@@ -288,83 +235,26 @@ protected:
         void reset();
 
     // Evaluation
-
-        //- Return the effective stress (viscous + turbulent)
-        tmp<volSymmTensorField> devRhoReff() const;
-
-        //- Return dynamic viscosity field
-        tmp<volScalarField> mu() const;
-
-        //- Return rho if specified otherwise rhoRef
-        tmp<volScalarField> rho() const;
-
-        //- Return rhoRef if the pressure field is
-        //- dynamic (i.e. p/rho), otherwise return 1
-        scalar rho(const volScalarField& p) const;
-
-        //- Add patch contributions to force and moment fields
-        void addToPatchFields
-        (
-            const label patchi,
-            const vectorField& Md,
-            const vectorField& fP,
-            const vectorField& fV
-        );
-
-        //- Add cell contributions to force and
-        //- moment fields, and include porosity effects
-        void addToInternalField
-        (
-            const labelList& cellIDs,
-            const vectorField& Md,
-            const vectorField& f
-        );
-
+        
+        void calculateIBMForces();
 
     // I-O
+        
+        void createOutputFiles();
 
-        //- Create the integrated-data files
-        void createIntegratedDataFiles();
-
-        //- Write header for an integrated-data file
-        void writeIntegratedDataFileHeader
-        (
-            const word& header,
-            OFstream& os
-        ) const;
-
-        //- Write integrated data to files
-        void writeIntegratedDataFiles();
-
-        //- Write integrated data to a file
-        void writeIntegratedDataFile
-        (
-            const vector& pres,
-            const vector& vis,
-            const vector& internal,
-            OFstream& os
-        ) const;
-
-        //- Write integrated data to stream
-        void logIntegratedData
-        (
-            const string& descriptor,
-            const vector& pres,
-            const vector& vis,
-            const vector& internal
-        ) const;
+        void writeToOutputFiles();
 
 
 public:
 
     //- Runtime type information
-    TypeName("forces");
+    TypeName("IBMForces");
 
 
     // Constructors
 
         //- Construct from Time and dictionary
-        forces
+        IBMForces
         (
             const word& name,
             const Time& runTime,
@@ -373,7 +263,7 @@ public:
         );
 
         //- Construct from objectRegistry and dictionary
-        forces
+        IBMForces
         (
             const word& name,
             const objectRegistry& obr,
@@ -382,29 +272,20 @@ public:
         );
 
         //- No copy construct
-        forces(const forces&) = delete;
+        IBMForces(const IBMForces&) = delete;
 
         //- No copy assignment
-        void operator=(const forces&) = delete;
+        void operator=(const IBMForces&) = delete;
 
 
     //- Destructor
-    virtual ~forces() = default;
+    virtual ~IBMForces() = default;
 
 
     // Member Functions
 
         //- Read the dictionary
         virtual bool read(const dictionary& dict);
-
-        //- Calculate forces and moments
-        virtual void calcForcesMoments();
-
-        //- Return the total force
-        virtual vector forceEff() const;
-
-        //- Return the total moment
-        virtual vector momentEff() const;
 
         //- Execute the function object
         virtual bool execute();
