@@ -152,13 +152,14 @@ void Foam::fv::penalisedSource::updateBodyVelocity()
 {
     if (moving_)
     {
-    	constexpr scalar dToR = Foam::constant::mathematical::pi / 180.0;
+        constexpr scalar dToR = Foam::constant::mathematical::pi / 180.0;
+        const vector shiftedCentreOfRotation = centreOfRotation_ + translationalDOF_;
         forAll(mesh_.C(), celli)
         {
             vector transU = translationalDOFVelocity_; // same for all points
             if (solidMask_[celli] > 0.0)
             {   
-                vector rotU = (rotationalDOFVelocity_ * dToR) ^ (mesh_.C()[celli] - centreOfRotation_);
+                vector rotU = (rotationalDOFVelocity_ * dToR) ^ (mesh_.C()[celli] - shiftedCentreOfRotation);
                 bodyVelocity_[celli] = baseVelocity_ + rotU + transU;
             }
             else
@@ -185,10 +186,32 @@ void Foam::fv::penalisedSource::updateBodyVelocity()
 
 void Foam::fv::penalisedSource::updateBodyForce()
 {
+    constexpr scalar dToR = Foam::constant::mathematical::pi / 180.0;
+    scalar dt = runTime_.deltaT().value();
+    scalar t = runTime_.value();
+    vector translationalDOFAcc = (translationalDOFFuncPtr_->value(t+dt)
+                                - translationalDOFFuncPtr_->value(t-dt))/(2.0*dt);
+    vector rotationalDOFAcc = (rotationalDOFFuncPtr_->value(t+dt)
+                                - rotationalDOFFuncPtr_->value(t-dt))/(2.0*dt);
+    
+    const vector shiftedCentreOfRotation = centreOfRotation_ + translationalDOF_;
+    
+    bodyForceLHSCoeff_ *= 0.0;
+    bodyForceRHS_ *= 0.0;
+
     forAll(mesh_.C(), celli)
     {
         bodyForceLHSCoeff_[celli] = penalisationFactor_ * solidMask_[celli] / mesh_.V()[celli];
         bodyForceRHS_[celli] = penalisationFactor_ * solidMask_[celli] * bodyVelocity_[celli] / mesh_.V()[celli];
+    
+        // update the inertia corrected body force
+
+        // compute acceleration of DOF using central difference
+        if (solidMask_[celli] > 0.0)
+        { 
+            bodyInertForce_[celli] += solidMask_[celli] * ((((rotationalDOFAcc * dToR) ^ (mesh_.C()[celli] - shiftedCentreOfRotation))
+                                         + translationalDOFAcc) * mesh_.V()[celli] * referenceDensity_);
+        }
     }
 }
 
@@ -248,34 +271,22 @@ volScalarField& Foam::fv::penalisedSource::getSolidMask()
 
 void Foam::fv::penalisedSource::createOutputFile()
 {
-    fileName dirForce;
     fileName dirDOF;
     if (Pstream::parRun())
     {
-        dirForce = runTime_.path()/"../postProcessing/IBMForce"
-            / runTime_.timeName();
         dirDOF = runTime_.path()/"../postProcessing/IBMDOF"
         / runTime_.timeName();
     }
     else
     {
-        dirForce = runTime_.path()/"postProcessing/IBMForce"
-            / runTime_.timeName();
         dirDOF = runTime_.path()/"postProcessing/IBMDOF"
             / runTime_.timeName();
     }
 
-    if (not isDir(dirForce))
-    {
-        mkDir(dirForce);
-    }
     if (not isDir(dirDOF))
     {
         mkDir(dirDOF);
     }
-
-    forceOutputFile_ = new OFstream(dirForce/name_);
-    *forceOutputFile_ << "time\tbodyForceX\tbodyForceY\tbodyForceZ\t" << endl;
 
     DOFOutputFile_ = new OFstream(dirDOF/name_);
     *DOFOutputFile_ << "time\tX\tY\tZ\troll\tpitch\tyaw\t" << endl;
@@ -283,17 +294,6 @@ void Foam::fv::penalisedSource::createOutputFile()
 
 void Foam::fv::penalisedSource::writeOutput()
 {
-    vector totForce = vector(0,0,0);
-    forAll(bodyForce_, cellI)
-    {
-        totForce += bodyForce_[cellI] * mesh_.V()[cellI] * referenceDensity_;
-    }
-    reduce(totForce, sumOp<vector>());
-
-    *forceOutputFile_ << runTime_.value()  << "\t"
-             << totForce[0] << "\t" << totForce[1] 
-             << "\t" << totForce[2] << "\t" << endl;
-
     *DOFOutputFile_ << runTime_.value()  << "\t"
                 << translationalDOF_[0] << "\t"
                 << translationalDOF_[1] << "\t"
@@ -332,15 +332,28 @@ Foam::fv::penalisedSource::penalisedSource
         mesh_,
         dimensionedVector("bodyForce",dimForce/dimVolume/dimDensity,vector::zero)
     ),
+    bodyInertForce_
+    (
+        IOobject
+        (
+            "bodyInertForce." + name,
+            mesh_.time().timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        mesh_,
+        dimensionedVector("bodyInertForce",dimForce/dimVolume/dimDensity,vector::zero)
+    ),
     bodyForceLHS_
     (
         IOobject
         (
-            "bodyForceLHS." + name,
+            "penalisationCoeff." + name,
             mesh_.time().timeName(),
             mesh,
             IOobject::NO_READ,
-            IOobject::NO_WRITE
+            IOobject::AUTO_WRITE
         ),
         mesh_,
         dimensionedVector("bodyForceLHS",dimForce/dimVolume/dimDensity,vector::zero)
@@ -366,7 +379,7 @@ Foam::fv::penalisedSource::penalisedSource
             mesh_.time().timeName(),
             mesh_,
             IOobject::NO_READ,
-            IOobject::NO_WRITE
+            IOobject::AUTO_WRITE
         ),
         mesh_,
         dimensionedScalar("bodyForceLHSCoeff",dimless/dimTime,0.0)
@@ -390,7 +403,7 @@ Foam::fv::penalisedSource::penalisedSource
         (
             "bodyVelocity." + name,
             mesh_.time().timeName(),
-            mesh,
+            mesh_,
             IOobject::NO_READ,
             IOobject::AUTO_WRITE
         ),
@@ -416,6 +429,8 @@ Foam::fv::penalisedSource::penalisedSource
     updateDOFs();
     updateSolidMask();
     updateBodyVelocity();
+
+    updateBodyForce();
 
     createOutputFile();
 }
@@ -451,11 +466,12 @@ void Foam::fv::penalisedSource::addSup
         TIMING_MSG("   updateBodyVelocity");
         updateBodyVelocity();
         TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
+        
+        TIMING_MSG("   updateBodyForce"); 
+        updateBodyForce();
+        TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
     }
 
-    TIMING_MSG("   updateBodyForce"); 
-    updateBodyForce();
-    TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
 
     // add term to the LHS of the momentum equation
     const volVectorField& U = eqn.psi();
@@ -469,6 +485,12 @@ void Foam::fv::penalisedSource::addSup
     writeOutput();
     TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
     TIMING_MSG("addSup: Done (" << timing.elapsedTime() << "s)\n");
+}
+
+void Foam::fv::penalisedSource::correct(volVectorField& U)
+{
+    bodyForceLHS_ = bodyForceLHSCoeff_ * U;
+    bodyForce_ = bodyForceRHS_ + bodyForceLHS_;
 }
 
 

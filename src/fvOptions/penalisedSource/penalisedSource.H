@@ -101,6 +101,9 @@ protected:
         //- Body force to apply to field
         volVectorField bodyForce_;
 
+        //- Body force to apply to field
+        volVectorField bodyInertForce_;
+
         //- Body force applied to LHS of momentum equations
         volVectorField bodyForceLHS_;
 
@@ -241,6 +244,9 @@ public:
                 fvMatrix<vector>& eqn,
                 const label fieldI
             );
+
+        // Correct terms
+            virtual void correct(volVectorField& U);
 };
 
 
