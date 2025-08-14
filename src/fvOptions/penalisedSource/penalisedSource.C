@@ -271,25 +271,28 @@ volScalarField& Foam::fv::penalisedSource::getSolidMask()
 
 void Foam::fv::penalisedSource::createOutputFile()
 {
-    fileName dirDOF;
-    if (Pstream::parRun())
+    if (Pstream::master())
     {
-        dirDOF = runTime_.path()/"../postProcessing/IBMDOF"
-        / runTime_.timeName();
-    }
-    else
-    {
-        dirDOF = runTime_.path()/"postProcessing/IBMDOF"
+        fileName dirDOF;
+        if (Pstream::parRun())
+        {
+            dirDOF = runTime_.path()/"../postProcessing/IBMDOF"
             / runTime_.timeName();
-    }
+        }
+        else
+        {
+            dirDOF = runTime_.path()/"postProcessing/IBMDOF"
+                / runTime_.timeName();
+        }
 
-    if (not isDir(dirDOF))
-    {
-        mkDir(dirDOF);
-    }
+        if (not isDir(dirDOF))
+        {
+            mkDir(dirDOF);
+        }
 
-    DOFOutputFile_ = new OFstream(dirDOF/name_);
-    *DOFOutputFile_ << "time\tX\tY\tZ\troll\tpitch\tyaw\t" << endl;
+        DOFOutputFile_ = new OFstream(dirDOF/name_);
+        *DOFOutputFile_ << "time\tX\tY\tZ\troll\tpitch\tyaw\t" << endl;
+    }
 }
 
 void Foam::fv::penalisedSource::writeOutput()
