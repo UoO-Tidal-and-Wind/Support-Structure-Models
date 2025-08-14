@@ -198,6 +198,8 @@ protected:
         
         //- Pointers to runTime
         const Time& runTime_;
+
+        bool showTiming_;
         
         // Fields
 
