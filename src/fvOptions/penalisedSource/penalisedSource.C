@@ -294,14 +294,17 @@ void Foam::fv::penalisedSource::createOutputFile()
 
 void Foam::fv::penalisedSource::writeOutput()
 {
-    *DOFOutputFile_ << runTime_.value()  << "\t"
-                << translationalDOF_[0] << "\t"
-                << translationalDOF_[1] << "\t"
-                << translationalDOF_[2] << "\t"
-                << rotationalDOF_[0] << "\t"
-                << rotationalDOF_[1] << "\t"
-                << rotationalDOF_[2] << "\t"
-                << endl;
+    if (Pstream::master())
+    {
+        *DOFOutputFile_ << runTime_.value()  << "\t"
+                    << translationalDOF_[0] << "\t"
+                    << translationalDOF_[1] << "\t"
+                    << translationalDOF_[2] << "\t"
+                    << rotationalDOF_[0] << "\t"
+                    << rotationalDOF_[1] << "\t"
+                    << rotationalDOF_[2] << "\t"
+                    << endl;
+    }
 }
 
 

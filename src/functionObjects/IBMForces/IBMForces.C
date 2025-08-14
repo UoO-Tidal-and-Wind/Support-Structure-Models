@@ -243,43 +243,49 @@ bool Foam::functionObjects::IBMForces::write()
 
 void Foam::functionObjects::IBMForces::createOutputFiles()
 {
-    fileName dirForce;
-    if (Pstream::parRun())
+    if (Pstream::master())
     {
-        dirForce = runTime_.path()/"../postProcessing/IBMForce"
-            / runTime_.timeName();
-    }
-    else
-    {
-        dirForce = runTime_.path()/"postProcessing/IBMForce"
-            / runTime_.timeName();
-    }
+        fileName dirForce;
+        if (Pstream::parRun())
+        {
+            dirForce = runTime_.path()/"../postProcessing/IBMForce"
+                / runTime_.timeName();
+        }
+        else
+        {
+            dirForce = runTime_.path()/"postProcessing/IBMForce"
+                / runTime_.timeName();
+        }
 
-    if (not isDir(dirForce))
-    {
-        mkDir(dirForce);
-    }
+        if (not isDir(dirForce))
+        {
+            mkDir(dirForce);
+        }
 
-    forAll(IBMObjectNames_, nameI)
-    {
-        forceFiles_[nameI] = new OFstream(dirForce/IBMObjectNames_[nameI]);
-        *forceFiles_[nameI] << "time\tbodyForceX\tbodyForceY\tbodyForceZ\tbodyInertForceX\tbodyInertForceY\tbodyInertForceZ\t" << endl;
+        forAll(IBMObjectNames_, nameI)
+        {
+            forceFiles_[nameI] = new OFstream(dirForce/IBMObjectNames_[nameI]);
+            *forceFiles_[nameI] << "time\tbodyForceX\tbodyForceY\tbodyForceZ\tbodyInertForceX\tbodyInertForceY\tbodyInertForceZ\t" << endl;
+        }
     }
 }
 
 void Foam::functionObjects::IBMForces::writeToOutputFiles()
 {
-    forAll(IBMObjectNames_, nameI)
+    if (Pstream::master())
     {
-        *forceFiles_[nameI] << runTime_.value() << "\t"
-                            << sumIBMForces_[nameI][0] << "\t"
-                            << sumIBMForces_[nameI][1] << "\t"
-                            << sumIBMForces_[nameI][2] << "\t"
-                            << sumIBMInertForces_[nameI][0] << "\t"
-                            << sumIBMInertForces_[nameI][1] << "\t"
-                            << sumIBMInertForces_[nameI][2] << "\t"
-                            << endl;
+        forAll(IBMObjectNames_, nameI)
+        {
+            *forceFiles_[nameI] << runTime_.value() << "\t"
+                                << sumIBMForces_[nameI][0] << "\t"
+                                << sumIBMForces_[nameI][1] << "\t"
+                                << sumIBMForces_[nameI][2] << "\t"
+                                << sumIBMInertForces_[nameI][0] << "\t"
+                                << sumIBMInertForces_[nameI][1] << "\t"
+                                << sumIBMInertForces_[nameI][2] << "\t"
+                                << endl;
 
+        }
     }
 }
 
