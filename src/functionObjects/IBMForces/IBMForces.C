@@ -189,8 +189,12 @@ bool Foam::functionObjects::IBMForces::read(const dictionary& dict)
 bool Foam::functionObjects::IBMForces::execute()
 {
     Log << type() << " " << name() << " write:" << nl;
-
+    clockTime timing;
+    TIMING_MSG("Timing:\n");
+    TIMING_MSG("   calculateIBMForces"); 
     calculateIBMForces();
+    TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
+
     return true;
 }
 
@@ -223,13 +227,17 @@ void Foam::functionObjects::IBMForces::calculateIBMForces()
 
 bool Foam::functionObjects::IBMForces::write()
 {
+    clockTime timing;
     if (writeToFile())
     {
         Log << "    writing force files." << endl;
+        TIMING_MSG("Timing:\n");
+        TIMING_MSG("   write"); 
         writeToOutputFiles();
+        TIMING_MSG(": Done (" << timing.timeIncrement() << "s)\n");
     }
-    Log << endl;
-
+    // Log << endl;
+    
     return true;
 }
 
