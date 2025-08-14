@@ -34,6 +34,9 @@ License
 #include "cartesianCS.H"
 #include "addToRunTimeSelectionTable.H"
 
+#define TIMING_MSG(msg) if (showTiming_) Info << msg
+
+
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
 namespace Foam
@@ -73,6 +76,7 @@ Foam::functionObjects::IBMForces::IBMForces
     fvMeshFunctionObject(name, runTime, dict),
     writeFile(mesh_, name),
     runTime_(mesh_.time()),
+    showTiming_(false),
     referenceDensity_(VGREAT),
     initialised_(false)
 {
@@ -96,6 +100,7 @@ Foam::functionObjects::IBMForces::IBMForces
     fvMeshFunctionObject(name, obr, dict),
     writeFile(mesh_, name),
     runTime_(mesh_.time()),
+    showTiming_(false),
     referenceDensity_(VGREAT),
     initialised_(false)
 {
@@ -127,6 +132,8 @@ bool Foam::functionObjects::IBMForces::read(const dictionary& dict)
 
     // read list of IBM names
     dict.lookup("IBMNames") >> IBMObjectNames_;
+    // dict.readIfPresent<bool>("showTiming", showTiming_);
+    showTiming_ = dict.getOrDefault<bool>("showTiming", false);
     
     // sums
     sumIBMForces_ = vectorList(IBMObjectNames_.size(), vector::zero);
@@ -152,11 +159,12 @@ bool Foam::functionObjects::IBMForces::read(const dictionary& dict)
         }
         else
         {
+            Info << "could not find the field:" << bodyForceName << endl;
             FatalErrorInFunction
             << "Could not find field: " 
             << bodyForceName << abort(FatalIOError);
         }
-
+        
         const word inertBodyForceName = "bodyInertForce." + name;
         if (foundObject<volVectorField>(inertBodyForceName))
         {
@@ -165,6 +173,7 @@ bool Foam::functionObjects::IBMForces::read(const dictionary& dict)
         }
         else
         {
+            Info << "could not find the field:" << inertBodyForceName << endl;
             FatalErrorInFunction
             << "Could not find field: " 
             << inertBodyForceName << abort(FatalIOError);
@@ -172,7 +181,7 @@ bool Foam::functionObjects::IBMForces::read(const dictionary& dict)
         
         reset();
     }
-
+    
     return true;
 }
 
